@@ -9,7 +9,7 @@ platform :ios, '14.0'
 # keep_silent!
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
