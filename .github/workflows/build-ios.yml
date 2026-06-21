@@ -19,11 +19,7 @@ jobs:
           channel: 'stable'
 
       - name: Install dependencies
-        run: |
-          flutter pub get
-          cd ios
-          pod install
-          cd ..
+        run: flutter pub get
 
       - name: Build iOS App (Unsigned)
         run: flutter build ios --release --no-codesign
