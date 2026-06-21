@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_session/audio_session.dart';
 import 'services/download_service.dart';
 import 'controllers/favorites_controller.dart';
 import 'screens/main_navigation_screen.dart';
@@ -13,6 +14,10 @@ void main() async {
     androidNotificationChannelName: 'YouTube Playback',
     androidNotificationOngoing: true,
   );
+
+  // Configure AudioSession for music playback to prevent volume ducking by OS
+  final session = await AudioSession.instance;
+  await session.configure(const AudioSessionConfiguration.music());
 
   // Initialize download service (loads local cache metadata)
   await DownloadService().init();

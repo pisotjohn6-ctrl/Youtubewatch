@@ -22,6 +22,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   final AudioPlayer _audioPlayer = AudioPlayer();
   VideoPlayerController? _videoController;
   yt.StreamManifest? _currentManifest;
+  AudioSource? _currentAudioSource;
+  String? _currentLoadedAudioId;
+  final Map<String, yt.StreamManifest> _manifestCache = {};
 
   List<PlayableItem> _playlist = [];
   int _currentIndex = -1;
@@ -62,6 +65,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _initAudioPlayer() {
+    _audioPlayer.setVolume(1.0);
     // Listen for background player status
     _audioPlayer.playerStateStream.listen((state) {
       if (!_isVideoActive) {
@@ -139,6 +143,32 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  void _addToCache(String id, yt.StreamManifest manifest) {
+    if (_manifestCache.length >= 20) {
+      _manifestCache.remove(_manifestCache.keys.first);
+    }
+    _manifestCache[id] = manifest;
+  }
+
+  void _prefetchNextItem() {
+    if (_playlist.isEmpty || _currentIndex == -1) return;
+    int nextIndex = _currentIndex + 1;
+    if (nextIndex >= _playlist.length) {
+      nextIndex = 0; // Wrap around
+    }
+    final nextItem = _playlist[nextIndex];
+    if (nextItem.isOffline || _manifestCache.containsKey(nextItem.id)) return;
+
+    _youtubeService.getStreamManifest(nextItem.id).then((manifest) {
+      if (manifest != null) {
+        _addToCache(nextItem.id, manifest);
+        print("Prefetched manifest for next song: ${nextItem.title}");
+      }
+    }).catchError((e) {
+      print("Error prefetching manifest: $e");
+    });
+  }
+
   Future<void> _initializeCurrentItem() async {
     final item = currentItem;
     if (item == null) return;
@@ -154,10 +184,24 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         videoUrl = item.localPath;
         audioUrl = item.localPath;
       } else {
-        final manifest = await _youtubeService.getStreamManifest(item.id);
+        yt.StreamManifest? manifest;
+        if (_manifestCache.containsKey(item.id)) {
+          manifest = _manifestCache[item.id];
+          print("Using cached manifest for song: ${item.title}");
+        } else {
+          manifest = await _youtubeService.getStreamManifest(item.id);
+          if (manifest != null) {
+            _addToCache(item.id, manifest);
+          }
+        }
+
         if (manifest != null) {
           _currentManifest = manifest;
+          
+          // Select highest resolution muxed stream (typically 720p) which is 16-aligned
+          // and avoids rendering stride corruption on Android emulators like LD Player.
           final videoStream = manifest.muxed.reduce((curr, next) => curr.videoResolution.height > next.videoResolution.height ? curr : next);
+
           final audioStream = manifest.audio.reduce((curr, next) => curr.bitrate.bitsPerSecond > next.bitrate.bitsPerSecond ? curr : next);
           videoUrl = videoStream.url.toString();
           audioUrl = audioStream.url.toString();
@@ -168,7 +212,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         throw Exception("Could not retrieve stream URLs");
       }
 
-      // Initialize AudioPlayer
+      // Initialize AudioPlayer source metadata
       final audioSource = AudioSource.uri(
         item.isOffline ? Uri.file(audioUrl) : Uri.parse(audioUrl),
         tag: MediaItem(
@@ -178,15 +222,10 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
           artUri: Uri.parse(item.thumbnailUrl),
         ),
       );
+      _currentAudioSource = audioSource;
 
       // Initialize VideoPlayer (if foreground)
       if (_isVideoActive) {
-        // Load audio source in background (unawaited) for instant video startup
-        _audioPlayer.setAudioSource(audioSource).catchError((e) {
-          print("Background audio source error: $e");
-          return null;
-        });
-
         if (item.isOffline) {
           _videoController = VideoPlayerController.file(File(videoUrl));
         } else {
@@ -197,14 +236,31 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         _videoController!.addListener(_videoListener);
         await _videoController!.play();
         _isPlaying = true;
+        _isBuffering = false;
+        notifyListeners();
+
+        // Load audio source in background after video has started to optimize network/CPU
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (_isVideoActive && _videoController != null && _videoController!.value.isPlaying && _currentLoadedAudioId != item.id) {
+            _audioPlayer.setAudioSource(audioSource).then((_) {
+              _currentLoadedAudioId = item.id;
+            }).catchError((e) {
+              print("Background audio source error: $e");
+              return null;
+            });
+          }
+        });
       } else {
         await _audioPlayer.setAudioSource(audioSource);
+        _currentLoadedAudioId = item.id;
         await _audioPlayer.play();
         _isPlaying = true;
+        _isBuffering = false;
+        notifyListeners();
       }
 
-      _isBuffering = false;
-      notifyListeners();
+      // Prefetch the next song's details in the background
+      _prefetchNextItem();
     } catch (e) {
       print("Initialization error: $e");
       _isBuffering = false;
@@ -311,6 +367,8 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> stop() async {
     _isPlaying = false;
     _currentManifest = null;
+    _currentAudioSource = null;
+    _currentLoadedAudioId = null;
     if (_videoController != null) {
       _videoController!.removeListener(_videoListener);
       await _videoController!.pause();
@@ -337,12 +395,17 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
 
         if (wasPlaying && currentItem != null) {
           try {
-            _audioPlayer.seek(position).then((_) {
-              if (!_isVideoActive && _isPlaying) {
-                _audioPlayer.play();
-              }
-            });
             _isPlaying = true;
+            // If background audio source hasn't loaded yet due to delayed load, set it immediately
+            if (_currentLoadedAudioId != currentItem!.id && _currentAudioSource != null) {
+              _audioPlayer.setAudioSource(_currentAudioSource!);
+              _currentLoadedAudioId = currentItem!.id;
+            }
+            _audioPlayer.setVolume(1.0); // Ensure volume is not ducked on background transition
+            // Play immediately and seek without await to start the foreground service
+            // while the app is still in the foreground.
+            _audioPlayer.seek(position);
+            _audioPlayer.play();
           } catch (e) {
             print("Background audio playback error: $e");
           }

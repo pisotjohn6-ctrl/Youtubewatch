@@ -43,15 +43,7 @@ class YoutubeService {
 
   Future<StreamManifest?> getStreamManifest(String videoId) async {
     try {
-      return await _yt.videos.streamsClient.getManifest(
-        videoId,
-        ytClients: [
-          YoutubeApiClient.ios,
-          YoutubeApiClient.tv,
-          YoutubeApiClient.android,
-        ],
-        requireWatchPage: false,
-      );
+      return await _yt.videos.streamsClient.getManifest(videoId);
     } catch (e) {
       print('Error getting stream manifest: $e');
       return null;
