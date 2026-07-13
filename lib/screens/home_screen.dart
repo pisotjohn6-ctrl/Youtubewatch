@@ -13,24 +13,23 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   final YoutubeService _youtubeService = YoutubeService();
   final DownloadService _downloadService = DownloadService();
   final PlaybackController _playbackController = PlaybackController();
   final FavoritesController _favoritesController = FavoritesController();
-  final CastController _castController = CastController();
-  
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _searchFocusNode = FocusNode();
   
   List<yt.Video> _searchResults = [];
   List<yt.Video> _shortsList = [];
   bool _isLoading = false;
-  bool _isSearching = false;
   String _selectedTag = "All";
+
+  void performSearch(String query) {
+    _performSearch(query);
+  }
 
   final List<String> _categories = [
     "All",
@@ -51,8 +50,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -115,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (query.trim().isEmpty) return;
     setState(() {
       _isLoading = true;
-      _isSearching = false; // Collapse search bar mode
       _selectedTag = ""; // Clear active tag selection during search
     });
 
@@ -132,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onTagSelected(String tag) {
     setState(() {
       _selectedTag = tag;
-      _searchController.clear();
     });
     _loadHomeFeed();
   }
@@ -178,20 +173,12 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // YouTube Header Top Bar
+            // Category Tags (Always visible below the global top bar)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-              child: _buildTopBar(),
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
+              child: _buildCategoryTags(),
             ),
-            
-            // Category Tags (Visible only if not active searching)
-            if (!_isSearching) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: _buildCategoryTags(),
-              ),
-              const Divider(color: Color(0xFF2E2E2E), height: 1),
-            ],
+            const Divider(color: Color(0xFF2E2E2E), height: 1),
 
             // Video Feed & Search Results
             Expanded(
@@ -251,244 +238,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    if (_isSearching) {
-      return Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: const Color(0xFF212121),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-              onPressed: () {
-                setState(() {
-                  _isSearching = false;
-                  _searchFocusNode.unfocus();
-                });
-              },
-            ),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 15),
-                textInputAction: TextInputAction.search,
-                onSubmitted: _performSearch,
-                decoration: const InputDecoration(
-                  hintText: "Search YouTube...",
-                  hintStyle: TextStyle(color: Colors.grey, fontSize: 15),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 10),
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.clear, color: Colors.white, size: 18),
-              onPressed: () {
-                _searchController.clear();
-              },
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        // YouTube Logo & Subtitle
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Icon(
-                    Icons.play_arrow,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Text(
-                  "YouTube",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: -0.8,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            const Text(
-              "Enjoy Watch (ដោយ៖ ហួត យូមាស)",
-              style: TextStyle(
-                color: Colors.grey,
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        // Actions
-        ListenableBuilder(
-          listenable: _castController,
-          builder: (context, _) {
-            final isConnected = _castController.isConnected;
-            return IconButton(
-              icon: Icon(
-                isConnected ? Icons.cast_connected : Icons.cast,
-                color: isConnected ? Colors.red : Colors.white,
-                size: 22,
-              ),
-              onPressed: _showCastDevicePickerDialog,
-            );
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.search, color: Colors.white, size: 22),
-          onPressed: () {
-            setState(() {
-              _isSearching = true;
-            });
-            // Focus after build is complete
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _searchFocusNode.requestFocus();
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  void _showCastDevicePickerDialog() {
-    _castController.startDiscovery();
-    
-    showDialog(
-      context: context,
-      builder: (context) {
-        return ListenableBuilder(
-          listenable: _castController,
-          builder: (context, _) {
-            final devices = _castController.discoveredDevices;
-            final isConnected = _castController.isConnected;
-            final connectedDevice = _castController.connectedDevice;
-            final isConnecting = _castController.isConnecting;
-
-            return AlertDialog(
-              backgroundColor: const Color(0xFF212121),
-              title: const Row(
-                children: [
-                  Icon(Icons.cast, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text("ជ្រើសរើស TV (Select TV)", style: TextStyle(color: Colors.white, fontSize: 16)),
-                ],
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 250,
-                child: isConnecting
-                    ? const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.red)),
-                            SizedBox(height: 16),
-                            Text("កំពុងភ្ជាប់ទៅកាន់ TV...", style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      )
-                    : Column(
-                        children: [
-                          if (isConnected && connectedDevice != null) ...[
-                            ListTile(
-                              leading: const Icon(Icons.cast_connected, color: Colors.green),
-                              title: Text(connectedDevice.name, style: const TextStyle(color: Colors.white)),
-                              subtitle: const Text("បានភ្ជាប់រួចរាល់ (Connected)", style: TextStyle(color: Colors.grey)),
-                              trailing: TextButton(
-                                onPressed: () {
-                                  _castController.disconnect();
-                                  Navigator.pop(context);
-                                },
-                                child: const Text("Disconnect", style: TextStyle(color: Colors.red)),
-                              ),
-                            ),
-                            const Divider(color: Colors.grey),
-                          ],
-                          Expanded(
-                            child: _castController.isSearching
-                                ? const Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.red)),
-                                        SizedBox(height: 12),
-                                        Text("កំពុងស្វែងរកឧបករណ៍ TV...", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                                      ],
-                                    ),
-                                  )
-                                : devices.isEmpty
-                                    ? const Center(
-                                        child: Text("រកមិនឃើញឧបករណ៍ TV ទេ (No TV found)", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                                      )
-                                    : ListView.builder(
-                                        itemCount: devices.length,
-                                        itemBuilder: (context, index) {
-                                          final dev = devices[index];
-                                          if (isConnected && connectedDevice?.serviceName == dev.serviceName) {
-                                            return const SizedBox.shrink();
-                                          }
-
-                                          return ListTile(
-                                            leading: const Icon(Icons.tv, color: Colors.white),
-                                            title: Text(dev.name, style: const TextStyle(color: Colors.white)),
-                                            onTap: () async {
-                                              await _castController.connect(dev);
-                                              if (mounted) {
-                                                Navigator.pop(context);
-                                              }
-                                            },
-                                          );
-                                        },
-                                      ),
-                          ),
-                        ],
-                      ),
-              ),
-              actions: [
-                if (!_castController.isSearching && !isConnecting)
-                  TextButton(
-                    onPressed: () {
-                      _castController.startDiscovery();
-                    },
-                    child: const Text("ស្វែងរកឡើងវិញ (Rescan)", style: TextStyle(color: Colors.red)),
-                  ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  child: const Text("បិទ (Close)", style: TextStyle(color: Colors.grey)),
-                ),
-              ],
-            );
-          },
-        );
-      },
     );
   }
 

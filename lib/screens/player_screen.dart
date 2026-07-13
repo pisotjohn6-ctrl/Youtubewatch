@@ -244,7 +244,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       // Video Player Area
                       ConstrainedBox(
                         constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.55,
+                          maxHeight: MediaQuery.of(context).size.height * 0.30,
                         ),
                         child: AspectRatio(
                           aspectRatio: playerAspectRatio,
@@ -318,7 +318,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           sliderValue = sliderValue.clamp(0.0, 1.0);
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
                             child: Column(
                               children: [
                                 SliderTheme(
@@ -392,57 +392,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             overflow: TextOverflow.ellipsis,
                                             style: const TextStyle(
                                               color: Colors.white,
-                                              fontSize: 16,
+                                              fontSize: 13,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
-                                          const SizedBox(height: 6),
+                                          const SizedBox(height: 3),
                                           Text(
                                             subtitleText,
-                                            style: const TextStyle(color: Colors.grey, fontSize: 13),
+                                            style: const TextStyle(color: Colors.grey, fontSize: 10.5),
                                           ),
                                         ],
                                       ),
                                     ),
                                     _buildPlayerFavoriteButton(item),
                                     if (!item.isOffline) ...[
-                                      const SizedBox(width: 12),
+                                      const SizedBox(width: 8),
                                       _buildPlayerQualityButton(),
-                                      const SizedBox(width: 12),
+                                      const SizedBox(width: 8),
                                       _buildPlayerDownloadButton(item),
                                     ],
                                   ],
                                 );
                               },
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 10),
                             
                             // Audio Controller Buttons
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.skip_previous, size: 36, color: Colors.white),
+                                  icon: const Icon(Icons.skip_previous, size: 28, color: Colors.white),
                                   onPressed: _playbackController.playPrevious,
                                 ),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 16),
                                 CircleAvatar(
-                                  radius: 30,
+                                  radius: 22,
                                   backgroundColor: Colors.red,
                                   child: IconButton(
                                     icon: Icon(
                                       _playbackController.isPlaying
                                           ? Icons.pause
                                           : Icons.play_arrow,
-                                      size: 32,
+                                      size: 24,
                                       color: Colors.white,
                                     ),
                                     onPressed: _playbackController.togglePlay,
                                   ),
                                 ),
-                                const SizedBox(width: 20),
+                                const SizedBox(width: 16),
                                 IconButton(
-                                  icon: const Icon(Icons.skip_next, size: 36, color: Colors.white),
+                                  icon: const Icon(Icons.skip_next, size: 28, color: Colors.white),
                                   onPressed: _playbackController.playNext,
                                 ),
                               ],
@@ -451,7 +451,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                       ),
                       
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 8),
                       const Divider(color: Color(0xFF222222), height: 1),
 
                       // Playlist Queue (Up Next)
@@ -460,7 +460,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Padding(
-                              padding: EdgeInsets.only(left: 20.0, top: 15.0, bottom: 8.0),
+                              padding: EdgeInsets.only(left: 20.0, top: 8.0, bottom: 4.0),
                               child: Text(
                                 "Up Next",
                                 style: TextStyle(
@@ -588,7 +588,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
 
     return CircleAvatar(
-      radius: 19,
+      radius: 16,
       backgroundColor: const Color(0xFF2E2E2E),
       child: IconButton(
         padding: EdgeInsets.zero,
@@ -688,11 +688,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
 
         return CircleAvatar(
-          radius: 19,
+          radius: 16,
           backgroundColor: const Color(0xFF2E2E2E),
           child: IconButton(
             padding: EdgeInsets.zero,
-            icon: const Icon(Icons.download, color: Colors.white, size: 18),
+            icon: const Icon(Icons.download, color: Colors.white, size: 15),
             onPressed: () {
               _downloadDefault360p(item);
             },
@@ -708,14 +708,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       builder: (context, _) {
         final isFav = _favoritesController.isFavorite(item.id);
         return CircleAvatar(
-          radius: 19,
+          radius: 16,
           backgroundColor: const Color(0xFF2E2E2E),
           child: IconButton(
             padding: EdgeInsets.zero,
             icon: Icon(
               isFav ? Icons.favorite : Icons.favorite_border,
               color: isFav ? Colors.red : Colors.white,
-              size: 18,
+              size: 15,
             ),
             onPressed: () {
               _favoritesController.toggleFavorite(item);
