@@ -175,6 +175,27 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
       _videoController!.seekTo(audioPos);
     }
 
+    // Sync play/pause state from video player to audio player (e.g. if user taps video overlay controls)
+    if (_videoController!.value.isPlaying && !_isPlaying) {
+      _isPlaying = true;
+      _audioPlayer.play();
+      notifyListeners();
+    } else if (!_videoController!.value.isPlaying && _isPlaying && !_videoController!.value.isBuffering) {
+      _isPlaying = false;
+      _audioPlayer.pause();
+      notifyListeners();
+    }
+
+    // Ensure both are running if global playing state is active and not buffering
+    if (_isPlaying && !_isBuffering) {
+      if (!_audioPlayer.playing) {
+        _audioPlayer.play();
+      }
+      if (!_videoController!.value.isPlaying) {
+        _videoController!.play();
+      }
+    }
+
     // Handle buffering synchronization: pause audio if video is buffering, play when ready
     if (_videoController!.value.isBuffering && _audioPlayer.playing) {
       _audioPlayer.pause();
