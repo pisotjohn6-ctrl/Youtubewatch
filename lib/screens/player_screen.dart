@@ -357,62 +357,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         ),
                       ),
                       
-                      // Progress / Slider bar (sync details)
-                      StreamBuilder<Duration>(
-                        stream: _playbackController.positionStream,
-                        builder: (context, posSnapshot) {
-                          final currentPos = posSnapshot.data ?? _playbackController.currentPosition;
-                          final totalDur = _playbackController.totalDuration;
 
-                          double sliderValue = 0.0;
-                          if (totalDur.inMilliseconds > 0) {
-                            sliderValue = currentPos.inMilliseconds / totalDur.inMilliseconds;
-                          }
-                          sliderValue = sliderValue.clamp(0.0, 1.0);
-
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
-                            child: Column(
-                              children: [
-                                SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    activeTrackColor: Colors.red,
-                                    inactiveTrackColor: Colors.grey[800],
-                                    trackHeight: 3.0,
-                                    thumbColor: Colors.red,
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
-                                    overlayColor: Colors.red.withAlpha(32),
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 14.0),
-                                  ),
-                                  child: Slider(
-                                    value: sliderValue,
-                                    onChanged: (val) {
-                                      final newMs = (val * totalDur.inMilliseconds).toInt();
-                                      _playbackController.seek(Duration(milliseconds: newMs));
-                                    },
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        _formatDuration(currentPos),
-                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                      ),
-                                      Text(
-                                        _formatDuration(totalDur),
-                                        style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
 
                       // Meta Title, Channel & Playback Buttons
                       Padding(
