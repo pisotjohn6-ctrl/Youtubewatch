@@ -22,22 +22,99 @@ class _HomeScreenState extends State<HomeScreen> {
   final FavoritesController _favoritesController = FavoritesController();
   
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  
   List<yt.Video> _searchResults = [];
+  List<yt.Video> _shortsList = [];
   bool _isLoading = false;
-  bool _hasSearched = false;
+  bool _isSearching = false;
+  String _selectedTag = "All";
+
+  final List<String> _categories = [
+    "All",
+    "Music",
+    "Gaming",
+    "Comedy",
+    "Dramas",
+    "Remix",
+    "Trending",
+  ];
 
   @override
   void initState() {
     super.initState();
-    // Default search to show some trending/recommended music content on start
-    _performSearch("Khmer remix 2026");
+    _loadHomeFeed();
+    _loadShortsShelf();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  String _getQueryForTag(String tag) {
+    switch (tag) {
+      case "All":
+        return "Cambodia trending popular";
+      case "Music":
+        return "Khmer music trending";
+      case "Gaming":
+        return "MLBB gaming tournament cambodia";
+      case "Comedy":
+        return "Khmer comedy funny clip";
+      case "Dramas":
+        return "Khmer drama full series";
+      case "Remix":
+        return "Khmer remix 2026 tik tok";
+      case "Trending":
+        return "trending videos";
+      default:
+        return tag;
+    }
+  }
+
+  Future<void> _loadHomeFeed() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+    
+    final query = _getQueryForTag(_selectedTag);
+    final results = await _youtubeService.searchVideos(query);
+    
+    if (mounted) {
+      setState(() {
+        _searchResults = results;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadShortsShelf() async {
+    try {
+      final searchList = await _youtubeService.searchVideos("shorts comedy music");
+      final shorts = searchList.where((v) {
+        final dur = v.duration;
+        return dur != null && dur.inSeconds <= 90;
+      }).toList();
+      if (mounted) {
+        setState(() {
+          _shortsList = shorts;
+        });
+      }
+    } catch (e) {
+      print("Error loading shorts shelf: $e");
+    }
   }
 
   Future<void> _performSearch(String query) async {
     if (query.trim().isEmpty) return;
     setState(() {
       _isLoading = true;
-      _hasSearched = true;
+      _isSearching = false; // Collapse search bar mode
+      _selectedTag = ""; // Clear active tag selection during search
     });
 
     final results = await _youtubeService.searchVideos(query);
@@ -48,6 +125,14 @@ class _HomeScreenState extends State<HomeScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _onTagSelected(String tag) {
+    setState(() {
+      _selectedTag = tag;
+      _searchController.clear();
+    });
+    _loadHomeFeed();
   }
 
   void _downloadDefault360p(yt.Video video) {
@@ -69,8 +154,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _playVideo(yt.Video video) {
-    // Generate playlist queue from search results
-    final queue = _searchResults.map((v) => PlayableItem.fromVideo(v)).toList();
+    // Generate playlist queue from current list
+    final List<PlayableItem> queue = _searchResults.map((v) => PlayableItem.fromVideo(v)).toList();
     final selectedItem = PlayableItem.fromVideo(video);
 
     _playbackController.playItem(selectedItem, queue);
@@ -87,183 +172,261 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF0F0F0F),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Column(
-            children: [
-              const SizedBox(height: 15),
-              // YouTube Logo
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    "YouTube",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -1.0,
-                    ),
-                  ),
-                ],
+        child: Column(
+          children: [
+            // YouTube Header Top Bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              child: _buildTopBar(),
+            ),
+            
+            // Category Tags (Visible only if not active searching)
+            if (!_isSearching) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
+                child: _buildCategoryTags(),
               ),
-              const SizedBox(height: 8),
-              // Subtitle Phrases in Khmer OS Freehand
-              const Text(
-                "រីករាយទស្សនា",
-                style: TextStyle(
-                  color: Colors.redAccent,
-                  fontSize: 22,
-                  fontFamily: 'Khmer OS Freehand',
-                ),
-              ),
-              const Text(
-                "ដោយ៖ យូមាស",
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 14,
-                  fontFamily: 'Khmer OS Freehand',
-                ),
-              ),
-              const SizedBox(height: 15),
-              // Search Bar
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
-                  ],
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: _performSearch,
-                  decoration: InputDecoration(
-                    hintText: "Search YouTube...",
-                    hintStyle: const TextStyle(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.grey),
-                      onPressed: () {
-                        _searchController.clear();
-                      },
-                    ),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 15),
-              // Search Results
-              Expanded(
-                child: _isLoading
-                    ? const Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                        ),
-                      )
-                    : _searchResults.isEmpty
-                        ? Center(
-                            child: Text(
-                              _hasSearched
-                                  ? "No results found"
-                                  : "Type to search videos",
-                              style: const TextStyle(color: Colors.grey, fontSize: 16),
-                            ),
-                          )
-                        : StreamBuilder<List<DownloadTask>>(
-                            stream: _downloadService.tasksStream,
-                            builder: (context, snapshot) {
-                              final downloadTasks = snapshot.data ?? _downloadService.tasks;
-
-                              return ListView.builder(
-                                physics: const BouncingScrollPhysics(),
-                                itemCount: _searchResults.length,
-                                itemBuilder: (context, index) {
-                                  final video = _searchResults[index];
-                                  
-                                  // Check download status for this video
-                                  final videoTasks = downloadTasks.where((t) => (t.id.contains('@') ? t.id.split('@').first : t.id.split('_').first) == video.id.value).toList();
-                                  final dTask = videoTasks.firstWhere(
-                                    (t) => t.isDownloading,
-                                    orElse: () => videoTasks.isNotEmpty
-                                        ? videoTasks.first
-                                        : DownloadTask(
-                                            id: '',
-                                            title: '',
-                                            author: '',
-                                            thumbnailUrl: '',
-                                            durationString: '',
-                                          ),
-                                  );
-
-                                  return _buildVideoCard(video, dTask);
-                                },
-                              );
-                            },
-                          ),
-              ),
+              const Divider(color: Color(0xFF2E2E2E), height: 1),
             ],
-          ),
+
+            // Video Feed & Search Results
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                      ),
+                    )
+                  : _searchResults.isEmpty
+                      ? const Center(
+                          child: Text(
+                            "No videos found",
+                            style: TextStyle(color: Colors.grey, fontSize: 16),
+                          ),
+                        )
+                      : StreamBuilder<List<DownloadTask>>(
+                          stream: _downloadService.tasksStream,
+                          builder: (context, snapshot) {
+                            final downloadTasks = snapshot.data ?? _downloadService.tasks;
+                            
+                            bool showShorts = _shortsList.isNotEmpty && _searchResults.length > 2;
+                            int itemCount = _searchResults.length + (showShorts ? 1 : 0);
+
+                            return ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: itemCount,
+                              itemBuilder: (context, index) {
+                                if (showShorts && index == 2) {
+                                  return _buildShortsShelf();
+                                }
+
+                                final videoIndex = (showShorts && index > 2) ? index - 1 : index;
+                                final video = _searchResults[videoIndex];
+                                
+                                // Get download status
+                                final videoTasks = downloadTasks.where((t) => (t.id.contains('@') ? t.id.split('@').first : t.id.split('_').first) == video.id.value).toList();
+                                final dTask = videoTasks.firstWhere(
+                                  (t) => t.isDownloading,
+                                  orElse: () => videoTasks.isNotEmpty
+                                      ? videoTasks.first
+                                      : DownloadTask(
+                                          id: '',
+                                          title: '',
+                                          author: '',
+                                          thumbnailUrl: '',
+                                          durationString: '',
+                                        ),
+                                );
+
+                                return _buildVideoCard(video, dTask);
+                              },
+                            );
+                          },
+                        ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildVideoCard(yt.Video video, DownloadTask downloadTask) {
-    return GestureDetector(
-      onTap: () => _playVideo(video),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
+  Widget _buildTopBar() {
+    if (_isSearching) {
+      return Container(
+        height: 44,
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 6,
-              offset: const Offset(0, 3),
-            )
+          color: const Color(0xFF212121),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+              onPressed: () {
+                setState(() {
+                  _isSearching = false;
+                  _searchFocusNode.unfocus();
+                });
+              },
+            ),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                textInputAction: TextInputAction.search,
+                onSubmitted: _performSearch,
+                decoration: const InputDecoration(
+                  hintText: "Search YouTube...",
+                  hintStyle: TextStyle(color: Colors.grey, fontSize: 15),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.clear, color: Colors.white, size: 18),
+              onPressed: () {
+                _searchController.clear();
+              },
+            ),
           ],
         ),
-        child: Column(
+      );
+    }
+
+    return Row(
+      children: [
+        // YouTube Logo & Subtitle
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Thumbnail & Duration
-            Stack(
+            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: AspectRatio(
-                    aspectRatio: 16 / 9,
-                    child: Image.network(
-                      video.thumbnails.mediumResUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[900],
-                        child: const Icon(Icons.movie, color: Colors.grey),
-                      ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text(
+                  "YouTube",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            const Text(
+              "Enjoy Watch (ដោយ៖ ហួត យូមាស)",
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const Spacer(),
+        // Actions
+        IconButton(
+          icon: const Icon(Icons.cast, color: Colors.white, size: 22),
+          onPressed: () {},
+        ),
+        IconButton(
+          icon: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
+          onPressed: () {},
+        ),
+        IconButton(
+          icon: const Icon(Icons.search, color: Colors.white, size: 22),
+          onPressed: () {
+            setState(() {
+              _isSearching = true;
+            });
+            // Focus after build is complete
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _searchFocusNode.requestFocus();
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCategoryTags() {
+    return SizedBox(
+      height: 34,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: _categories.length,
+        itemBuilder: (context, index) {
+          final cat = _categories[index];
+          final isSelected = cat == _selectedTag;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: ChoiceChip(
+              label: Text(
+                cat,
+                style: TextStyle(
+                  color: isSelected ? Colors.black : Colors.white,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+              selected: isSelected,
+              onSelected: (selected) {
+                if (selected) {
+                  _onTagSelected(cat);
+                }
+              },
+              selectedColor: Colors.white,
+              backgroundColor: const Color(0xFF212121),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(17),
+              ),
+              showCheckmark: false,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildVideoCard(yt.Video video, DownloadTask downloadTask) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Thumbnail & Duration
+        GestureDetector(
+          onTap: () => _playVideo(video),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.network(
+                    video.thumbnails.mediumResUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey[900],
+                      child: const Icon(Icons.movie, color: Colors.grey, size: 48),
                     ),
                   ),
                 ),
@@ -271,7 +434,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   bottom: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                     decoration: BoxDecoration(
                       color: Colors.black.withOpacity(0.8),
                       borderRadius: BorderRadius.circular(4),
@@ -280,7 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       video.duration?.toString().split('.').first ?? '00:00',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -288,88 +451,292 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            // Info Row
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          video.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          "${video.author} • ${_formatViews(video.engagement.viewCount)} • ${_formatUploadDate(video.uploadDate)}",
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Favorite & Download Action Buttons
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildFavoriteButton(video),
-                      const SizedBox(width: 8),
-                      _buildDownloadActionButton(video, downloadTask),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        // Title & Info
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0xFF212121),
+                child: Text(
+                  video.author.isNotEmpty ? video.author[0].toUpperCase() : 'Y',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      video.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "${video.author} • ${_formatViews(video.engagement.viewCount)} • ${_formatUploadDate(video.uploadDate)}",
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => _showActionsBottomSheet(video, downloadTask),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildFavoriteButton(yt.Video video) {
+  void _showActionsBottomSheet(yt.Video video, DownloadTask downloadTask) {
     final playableItem = PlayableItem.fromVideo(video);
-    return ListenableBuilder(
-      listenable: _favoritesController,
-      builder: (context, _) {
-        final isFav = _favoritesController.isFavorite(video.id.value);
-        return CircleAvatar(
-          radius: 18,
-          backgroundColor: const Color(0xFF2E2E2E),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: Icon(
-              isFav ? Icons.favorite : Icons.favorite_border,
-              color: isFav ? Colors.red : Colors.white,
-              size: 18,
-            ),
-            onPressed: () {
-              _favoritesController.toggleFavorite(playableItem);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    isFav 
-                      ? "បានលុបពីវីដេអូពេញចិត្ត" 
-                      : "បានបន្ថែមទៅវីដេអូពេញចិត្ត"
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF212121),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[700],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  video.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
-                  duration: const Duration(seconds: 1),
+                ),
+              ),
+              const Divider(color: Color(0xFF2E2E2E)),
+              ListenableBuilder(
+                listenable: _favoritesController,
+                builder: (context, _) {
+                  final isFav = _favoritesController.isFavorite(video.id.value);
+                  return ListTile(
+                    leading: Icon(
+                      isFav ? Icons.favorite : Icons.favorite_border,
+                      color: isFav ? Colors.red : Colors.white,
+                    ),
+                    title: Text(
+                      isFav ? "លុបពីវីដេអូពេញចិត្ត (Remove Favorite)" : "បន្ថែមទៅវីដេអូពេញចិត្ត (Add Favorite)",
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    onTap: () {
+                      _favoritesController.toggleFavorite(playableItem);
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            isFav 
+                              ? "បានលុបពីវីដេអូពេញចិត្ត" 
+                              : "បានបន្ថែមទៅវីដេអូពេញចិត្ត"
+                          ),
+                          duration: const Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+              StreamBuilder<List<DownloadTask>>(
+                stream: _downloadService.tasksStream,
+                builder: (context, snapshot) {
+                  // Re-evaluate download status
+                  final tasks = snapshot.data ?? _downloadService.tasks;
+                  final videoTasks = tasks.where((t) => (t.id.contains('@') ? t.id.split('@').first : t.id.split('_').first) == video.id.value).toList();
+                  final dTask = videoTasks.firstWhere(
+                    (t) => t.isDownloading,
+                    orElse: () => videoTasks.isNotEmpty
+                        ? videoTasks.first
+                        : DownloadTask(
+                            id: '',
+                            title: '',
+                            author: '',
+                            thumbnailUrl: '',
+                            durationString: '',
+                          ),
+                  );
+
+                  final isDownloading = dTask.isDownloading;
+                  final isDownloaded = dTask.isCompleted;
+
+                  return ListTile(
+                    leading: Icon(
+                      isDownloading 
+                        ? Icons.hourglass_empty 
+                        : isDownloaded 
+                            ? Icons.check_circle 
+                            : Icons.download,
+                      color: isDownloading 
+                        ? Colors.red 
+                        : isDownloaded 
+                            ? Colors.green 
+                            : Colors.white,
+                    ),
+                    title: Text(
+                      isDownloading 
+                        ? "កំពុងទាញយក: ${(dTask.progress * 100).toInt()}% (Cancel)"
+                        : isDownloaded
+                            ? "បានទាញយករួចរាល់"
+                            : "ទាញយកវីដេអូ (Download Video)",
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (isDownloading) {
+                        _downloadService.cancelDownload(dTask.id);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("លុបចោលការទាញយក"),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      } else if (!isDownloaded) {
+                        _downloadDefault360p(video);
+                      }
+                    },
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildShortsShelf() {
+    if (_shortsList.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(Icons.play_circle_filled, color: Colors.red, size: 24),
+              SizedBox(width: 8),
+              Text(
+                "Shorts",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 250,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            itemCount: _shortsList.length,
+            itemBuilder: (context, index) {
+              final video = _shortsList[index];
+              return Container(
+                width: 130,
+                margin: const EdgeInsets.only(right: 12),
+                child: GestureDetector(
+                  onTap: () => _playVideo(video),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Image.network(
+                                  video.thumbnails.mediumResUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (c, e, s) => Container(
+                                    color: Colors.grey[900],
+                                    child: const Icon(Icons.play_arrow, color: Colors.grey, size: 36),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        video.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatViews(video.engagement.viewCount),
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
           ),
-        );
-      },
+        ),
+        const SizedBox(height: 12),
+        const Divider(color: Color(0xFF2E2E2E), thickness: 4),
+      ],
     );
   }
 
@@ -403,62 +770,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       return 'Just now';
     }
-  }
-
-  Widget _buildDownloadActionButton(yt.Video video, DownloadTask dTask) {
-    if (dTask.isDownloading) {
-      return GestureDetector(
-        onTap: () {
-          _downloadService.cancelDownload(dTask.id);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Download cancelled"),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "${(dTask.progress * 100).toInt()}%",
-              style: const TextStyle(
-                color: Colors.red,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CircularProgressIndicator(
-                    value: dTask.progress,
-                    color: Colors.red,
-                    backgroundColor: Colors.grey[800],
-                    strokeWidth: 3,
-                  ),
-                  const Icon(Icons.close, color: Colors.white, size: 16),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: const Color(0xFF2E2E2E),
-      child: IconButton(
-        padding: EdgeInsets.zero,
-        icon: const Icon(Icons.download, color: Colors.white, size: 18),
-        onPressed: () => _downloadDefault360p(video),
-      ),
-    );
   }
 }
 
