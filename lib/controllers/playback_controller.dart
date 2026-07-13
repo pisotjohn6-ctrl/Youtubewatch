@@ -34,6 +34,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   bool _isVideoActive = true;
   bool _isBuffering = false;
   bool _isTransitioning = false;
+  DateTime? _lastSyncTime;
 
   // Casting state
   Timer? _castProgressTimer;
@@ -163,9 +164,14 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     // Keep video player synchronized with the audio player position
+    // only if there is a major drift (e.g. > 1500ms) and we haven't synced in the last 4 seconds
+    // to prevent continuous seeking loops that freeze the video decoder.
     final audioPos = _audioPlayer.position;
     final videoPos = _videoController!.value.position;
-    if ((audioPos - videoPos).inMilliseconds.abs() > 350) {
+    final now = DateTime.now();
+    if ((audioPos - videoPos).inMilliseconds.abs() > 1500 &&
+        (_lastSyncTime == null || now.difference(_lastSyncTime!) > const Duration(seconds: 4))) {
+      _lastSyncTime = now;
       _videoController!.seekTo(audioPos);
     }
 
