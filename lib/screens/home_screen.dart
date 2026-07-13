@@ -4,6 +4,7 @@ import '../services/youtube_service.dart';
 import '../services/download_service.dart';
 import '../controllers/playback_controller.dart';
 import '../controllers/favorites_controller.dart';
+import '../controllers/cast_controller.dart';
 import '../models/playable_item.dart';
 import '../models/download_task.dart';
 import 'player_screen.dart';
@@ -20,6 +21,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final DownloadService _downloadService = DownloadService();
   final PlaybackController _playbackController = PlaybackController();
   final FavoritesController _favoritesController = FavoritesController();
+  final CastController _castController = CastController();
   
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -344,13 +346,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         const Spacer(),
         // Actions
-        IconButton(
-          icon: const Icon(Icons.cast, color: Colors.white, size: 22),
-          onPressed: () {},
-        ),
-        IconButton(
-          icon: const Icon(Icons.notifications_none, color: Colors.white, size: 22),
-          onPressed: () {},
+        ListenableBuilder(
+          listenable: _castController,
+          builder: (context, _) {
+            final isConnected = _castController.isConnected;
+            return IconButton(
+              icon: Icon(
+                isConnected ? Icons.cast_connected : Icons.cast,
+                color: isConnected ? Colors.red : Colors.white,
+                size: 22,
+              ),
+              onPressed: _showCastDevicePickerDialog,
+            );
+          },
         ),
         IconButton(
           icon: const Icon(Icons.search, color: Colors.white, size: 22),
@@ -365,6 +373,122 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
       ],
+    );
+  }
+
+  void _showCastDevicePickerDialog() {
+    _castController.startDiscovery();
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return ListenableBuilder(
+          listenable: _castController,
+          builder: (context, _) {
+            final devices = _castController.discoveredDevices;
+            final isConnected = _castController.isConnected;
+            final connectedDevice = _castController.connectedDevice;
+            final isConnecting = _castController.isConnecting;
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF212121),
+              title: const Row(
+                children: [
+                  Icon(Icons.cast, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text("ជ្រើសរើស TV (Select TV)", style: TextStyle(color: Colors.white, fontSize: 16)),
+                ],
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 250,
+                child: isConnecting
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.red)),
+                            SizedBox(height: 16),
+                            Text("កំពុងភ្ជាប់ទៅកាន់ TV...", style: TextStyle(color: Colors.white)),
+                          ],
+                        ),
+                      )
+                    : Column(
+                        children: [
+                          if (isConnected && connectedDevice != null) ...[
+                            ListTile(
+                              leading: const Icon(Icons.cast_connected, color: Colors.green),
+                              title: Text(connectedDevice.name, style: const TextStyle(color: Colors.white)),
+                              subtitle: const Text("បានភ្ជាប់រួចរាល់ (Connected)", style: TextStyle(color: Colors.grey)),
+                              trailing: TextButton(
+                                onPressed: () {
+                                  _castController.disconnect();
+                                  Navigator.pop(context);
+                                },
+                                child: const Text("Disconnect", style: TextStyle(color: Colors.red)),
+                              ),
+                            ),
+                            const Divider(color: Colors.grey),
+                          ],
+                          Expanded(
+                            child: _castController.isSearching
+                                ? const Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.red)),
+                                        SizedBox(height: 12),
+                                        Text("កំពុងស្វែងរកឧបករណ៍ TV...", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                                      ],
+                                    ),
+                                  )
+                                : devices.isEmpty
+                                    ? const Center(
+                                        child: Text("រកមិនឃើញឧបករណ៍ TV ទេ (No TV found)", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                                      )
+                                    : ListView.builder(
+                                        itemCount: devices.length,
+                                        itemBuilder: (context, index) {
+                                          final dev = devices[index];
+                                          if (isConnected && connectedDevice?.serviceName == dev.serviceName) {
+                                            return const SizedBox.shrink();
+                                          }
+
+                                          return ListTile(
+                                            leading: const Icon(Icons.tv, color: Colors.white),
+                                            title: Text(dev.name, style: const TextStyle(color: Colors.white)),
+                                            onTap: () async {
+                                              await _castController.connect(dev);
+                                              if (mounted) {
+                                                Navigator.pop(context);
+                                              }
+                                            },
+                                          );
+                                        },
+                                      ),
+                          ),
+                        ],
+                      ),
+              ),
+              actions: [
+                if (!_castController.isSearching && !isConnecting)
+                  TextButton(
+                    onPressed: () {
+                      _castController.startDiscovery();
+                    },
+                    child: const Text("ស្វែងរកឡើងវិញ (Rescan)", style: TextStyle(color: Colors.red)),
+                  ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  child: const Text("បិទ (Close)", style: TextStyle(color: Colors.grey)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

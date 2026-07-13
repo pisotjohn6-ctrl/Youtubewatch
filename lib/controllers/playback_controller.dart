@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import '../models/playable_item.dart';
 import '../services/youtube_service.dart';
+import '../controllers/cast_controller.dart';
 
 class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   // Singleton Pattern
@@ -33,6 +34,31 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   bool _isBuffering = false;
   bool _isTransitioning = false;
 
+  // Casting state
+  Timer? _castProgressTimer;
+  Duration _castPosition = Duration.zero;
+  Duration _castDuration = Duration.zero;
+
+  void _startCastProgressTimer() {
+    _castProgressTimer?.cancel();
+    _castProgressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isPlaying && CastController().isConnected) {
+        if (_castPosition < _castDuration) {
+          _castPosition += const Duration(seconds: 1);
+          _positionController.add(_castPosition);
+          notifyListeners();
+        } else {
+          playNext();
+        }
+      }
+    });
+  }
+
+  void _stopCastProgressTimer() {
+    _castProgressTimer?.cancel();
+    _castProgressTimer = null;
+  }
+
   final StreamController<Duration> _positionController = StreamController<Duration>.broadcast();
   final StreamController<Duration> _durationController = StreamController<Duration>.broadcast();
 
@@ -51,6 +77,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   Stream<Duration> get durationStream => _durationController.stream;
 
   Duration get currentPosition {
+    if (CastController().isConnected) {
+      return _castPosition;
+    }
     if (_isVideoActive && _videoController != null && _videoController!.value.isInitialized) {
       return _videoController!.value.position;
     }
@@ -58,6 +87,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Duration get totalDuration {
+    if (CastController().isConnected) {
+      return _castDuration;
+    }
     if (_isVideoActive && _videoController != null && _videoController!.value.isInitialized) {
       return _videoController!.value.duration;
     }
@@ -212,6 +244,44 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         throw Exception("Could not retrieve stream URLs");
       }
 
+      if (CastController().isConnected) {
+        CastController().castVideo(
+          videoUrl,
+          item.title,
+          item.author,
+          item.thumbnailUrl,
+        );
+        _isPlaying = true;
+        _isBuffering = false;
+
+        if (item.durationString.isNotEmpty) {
+          final parts = item.durationString.split(':');
+          if (parts.length == 2) {
+            _castDuration = Duration(minutes: int.parse(parts[0]), seconds: int.parse(parts[1]));
+          } else if (parts.length == 3) {
+            _castDuration = Duration(hours: int.parse(parts[0]), minutes: int.parse(parts[1]), seconds: int.parse(parts[2]));
+          } else {
+            _castDuration = Duration(seconds: int.parse(parts[0]));
+          }
+        } else {
+          _castDuration = Duration.zero;
+        }
+        _castPosition = Duration.zero;
+        _durationController.add(_castDuration);
+        _positionController.add(_castPosition);
+        _startCastProgressTimer();
+        notifyListeners();
+
+        await _audioPlayer.stop();
+        if (_videoController != null) {
+          _videoController!.removeListener(_videoListener);
+          await _videoController!.pause();
+          await _videoController!.dispose();
+          _videoController = null;
+        }
+        return;
+      }
+
       // Initialize AudioPlayer source metadata
       final audioSource = AudioSource.uri(
         item.isOffline ? Uri.file(audioUrl) : Uri.parse(audioUrl),
@@ -272,6 +342,18 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> togglePlay() async {
     if (currentItem == null) return;
 
+    if (CastController().isConnected) {
+      _isPlaying = !_isPlaying;
+      CastController().togglePlay(_isPlaying);
+      if (_isPlaying) {
+        _startCastProgressTimer();
+      } else {
+        _stopCastProgressTimer();
+      }
+      notifyListeners();
+      return;
+    }
+
     if (_isPlaying) {
       if (_isVideoActive && _videoController != null) {
         await _videoController!.pause();
@@ -291,6 +373,17 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> seek(Duration position) async {
+    if (CastController().isConnected) {
+      CastController().session?.sendMessage('urn:x-cast:com.google.cast.media', {
+        'type': 'SEEK',
+        'currentTime': position.inSeconds,
+      });
+      _castPosition = position;
+      _positionController.add(_castPosition);
+      notifyListeners();
+      return;
+    }
+
     if (_isVideoActive && _videoController != null) {
       await _videoController!.seekTo(position);
     } else {
@@ -369,6 +462,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
     _currentManifest = null;
     _currentAudioSource = null;
     _currentLoadedAudioId = null;
+    _stopCastProgressTimer();
+    _castPosition = Duration.zero;
+    _castDuration = Duration.zero;
     if (_videoController != null) {
       _videoController!.removeListener(_videoListener);
       await _videoController!.pause();
@@ -376,6 +472,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
       _videoController = null;
     }
     await _audioPlayer.stop();
+    if (CastController().isConnected) {
+      CastController().stop();
+    }
     notifyListeners();
   }
 

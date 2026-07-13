@@ -49,6 +49,7 @@ dependencies:
   audio_service: ^0.18.18
   ffmpeg_kit_flutter_new: ^4.2.1
   http: ^1.6.0
+  cast: ^2.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -109,3 +110,6 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+dependency_overrides:
+  bonsoir: ^5.0.0

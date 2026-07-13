@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import '../controllers/playback_controller.dart';
 import '../controllers/favorites_controller.dart';
+import '../controllers/cast_controller.dart';
 import '../services/youtube_service.dart';
 import '../services/download_service.dart';
 import '../models/download_task.dart';
@@ -30,8 +31,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _playbackController.addListener(_onPlaybackStateChanged);
+    CastController().addListener(_onCastStateChanged);
     _setupChewie();
     _updateVideoDetails();
+  }
+
+  void _onCastStateChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _updateVideoDetails() {
@@ -138,6 +146,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _playbackController.removeListener(_onPlaybackStateChanged);
+    CastController().removeListener(_onCastStateChanged);
     _chewieController?.dispose();
     super.dispose();
   }
@@ -241,12 +250,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           aspectRatio: playerAspectRatio,
                           child: Container(
                             color: Colors.black,
-                            child: _playbackController.isBuffering
-                                ? const Center(
-                                    child: CircularProgressIndicator(color: Colors.red),
+                            child: CastController().isConnected
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.cast_connected,
+                                          color: Colors.red,
+                                          size: 64,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          "Casting to ${CastController().connectedDevice?.name ?? 'TV'}",
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        const Text(
+                                          "សូមរីករាយទស្សនាលើអេក្រង់ TV របស់អ្នក",
+                                          style: TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   )
-                                : _chewieController != null
-                                    ? Chewie(controller: _chewieController!)
+                                : _playbackController.isBuffering
+                                    ? const Center(
+                                        child: CircularProgressIndicator(color: Colors.red),
+                                      )
+                                    : _chewieController != null
+                                        ? Chewie(controller: _chewieController!)
                                     : Center(
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(8),
