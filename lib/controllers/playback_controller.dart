@@ -150,20 +150,34 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   void _videoListener() {
     if (_videoController == null || !_isVideoActive) return;
 
-    _positionController.add(_videoController!.value.position);
-    _durationController.add(_videoController!.value.duration);
+    // Use audio player position/duration as source of truth
+    _positionController.add(_audioPlayer.position);
+    if (_audioPlayer.duration != null) {
+      _durationController.add(_audioPlayer.duration!);
+    }
 
-    final isBufferingNow = _videoController!.value.isBuffering;
+    final isBufferingNow = _videoController!.value.isBuffering || _audioPlayer.processingState == ProcessingState.buffering;
     if (isBufferingNow != _isBuffering) {
       _isBuffering = isBufferingNow;
       notifyListeners();
     }
 
-    // Auto-play next when video finishes
-    if (_videoController!.value.position >= _videoController!.value.duration &&
-        _videoController!.value.duration > Duration.zero &&
-        !_videoController!.value.isPlaying &&
-        _isPlaying) {
+    // Keep video player synchronized with the audio player position
+    final audioPos = _audioPlayer.position;
+    final videoPos = _videoController!.value.position;
+    if ((audioPos - videoPos).inMilliseconds.abs() > 350) {
+      _videoController!.seekTo(audioPos);
+    }
+
+    // Handle buffering synchronization: pause audio if video is buffering, play when ready
+    if (_videoController!.value.isBuffering && _audioPlayer.playing) {
+      _audioPlayer.pause();
+    } else if (!_videoController!.value.isBuffering && _isPlaying && !_audioPlayer.playing) {
+      _audioPlayer.play();
+    }
+
+    // Auto-play next when audio player finishes (audio is the source of truth)
+    if (_audioPlayer.processingState == ProcessingState.completed) {
       playNext();
     }
   }
@@ -320,24 +334,25 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         }
 
         await _videoController!.initialize();
+        await _videoController!.setVolume(0.0); // Mute video player
         _videoController!.addListener(_videoListener);
+        
+        // Initialize AudioPlayer immediately
+        await _audioPlayer.setAudioSource(audioSource);
+        _currentLoadedAudioId = item.id;
+        _audioPlayer.setVolume(1.0);
+
+        // Start both simultaneously
         await _videoController!.play();
+        await _audioPlayer.play();
+        
         _isPlaying = true;
         _isBuffering = false;
         notifyListeners();
-
-        // Load audio source in background immediately so it is preloaded and cached!
-        if (_currentLoadedAudioId != item.id) {
-          _audioPlayer.setAudioSource(audioSource).then((_) {
-            _currentLoadedAudioId = item.id;
-          }).catchError((e) {
-            print("Background audio source error: $e");
-            return null;
-          });
-        }
       } else {
         await _audioPlayer.setAudioSource(audioSource);
         _currentLoadedAudioId = item.id;
+        _audioPlayer.setVolume(1.0);
         await _audioPlayer.play();
         _isPlaying = true;
         _isBuffering = false;
@@ -370,17 +385,15 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     if (_isPlaying) {
-      if (_isVideoActive && _videoController != null) {
+      _audioPlayer.pause();
+      if (_videoController != null) {
         await _videoController!.pause();
-      } else {
-        await _audioPlayer.pause();
       }
       _isPlaying = false;
     } else {
-      if (_isVideoActive && _videoController != null) {
+      _audioPlayer.play();
+      if (_videoController != null) {
         await _videoController!.play();
-      } else {
-        await _audioPlayer.play();
       }
       _isPlaying = true;
     }
@@ -399,10 +412,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    if (_isVideoActive && _videoController != null) {
+    await _audioPlayer.seek(position);
+    if (_videoController != null) {
       await _videoController!.seekTo(position);
-    } else {
-      await _audioPlayer.seek(position);
     }
     notifyListeners();
   }
@@ -501,30 +513,15 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
       // Transition to BACKGROUND
       if (_isVideoActive && _videoController != null && _videoController!.value.isInitialized) {
         _isVideoActive = false;
-        final position = _videoController!.value.position;
-        final wasPlaying = _videoController!.value.isPlaying;
 
-        // Clean up video player state listener but keep player instance alive
+        // Clean up video player state listener
         _videoController!.removeListener(_videoListener);
 
-        if (wasPlaying && currentItem != null) {
-          try {
-            _isPlaying = true;
-            // If background audio source hasn't loaded yet due to delayed load, set it immediately
-            if (_currentLoadedAudioId != currentItem!.id && _currentAudioSource != null) {
-              _audioPlayer.setAudioSource(_currentAudioSource!);
-              _currentLoadedAudioId = currentItem!.id;
-            }
-            _audioPlayer.setVolume(1.0); // Ensure volume is not ducked on background transition
-            // Play immediately and seek without await to start the foreground service
-            // while the app is still in the foreground.
-            _audioPlayer.seek(position);
-            _audioPlayer.play();
-          } catch (e) {
-            print("Background audio playback error: $e");
-          }
-        }
-        _videoController!.pause(); // Unawaited pause for instant transition
+        // Pause video player
+        _videoController!.pause();
+        
+        // Ensure audio player continues playing
+        _audioPlayer.setVolume(1.0);
         notifyListeners();
       }
     } else if (state == AppLifecycleState.resumed) {
@@ -534,28 +531,18 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         final position = _audioPlayer.position;
         final wasPlaying = _audioPlayer.playing;
 
-        _audioPlayer.pause(); // Unawaited pause
-
         if (currentItem != null) {
           try {
             // Check if existing controller is still initialized and valid
             if (_videoController != null && _videoController!.value.isInitialized) {
-              _videoController!.removeListener(_videoListener); // Prevent duplicates
+              _videoController!.removeListener(_videoListener);
               _videoController!.addListener(_videoListener);
-              _videoController!.seekTo(position).then((_) {
-                if (_isVideoActive && wasPlaying) {
-                  _videoController!.play();
-                }
-              });
-
+              await _videoController!.seekTo(position);
               if (wasPlaying) {
-                _isPlaying = true;
-              } else {
-                _isPlaying = false;
+                await _videoController!.play();
               }
               notifyListeners();
             } else {
-              // Fallback: Re-create the controller if it was released or became invalid
               _isBuffering = true;
               notifyListeners();
 
@@ -581,14 +568,12 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
 
               if (_videoController != null) {
                 await _videoController!.initialize();
+                await _videoController!.setVolume(0.0); // Mute video player
                 _videoController!.addListener(_videoListener);
                 await _videoController!.seekTo(position);
 
                 if (wasPlaying) {
                   await _videoController!.play();
-                  _isPlaying = true;
-                } else {
-                  _isPlaying = false;
                 }
               }
               _isBuffering = false;
