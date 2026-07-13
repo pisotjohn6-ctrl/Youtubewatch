@@ -219,17 +219,69 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return Scaffold(
           backgroundColor: const Color(0xFF0F0F0F),
           appBar: AppBar(
-            backgroundColor: Colors.transparent,
+            backgroundColor: const Color(0xFF0F0F0F),
             elevation: 0,
             leading: IconButton(
               icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 30),
               onPressed: () => Navigator.pop(context),
             ),
-            title: const Text(
-              "Now Playing",
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+            titleSpacing: 0,
+            title: Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 13,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const Text(
+                          "YouTube",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: -0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 1),
+                    const Text(
+                      "Enjoy Watch (ដោយ៖ ហួត យូមាស)",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            centerTitle: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.search, color: Colors.white, size: 22),
+                onPressed: () {
+                  // Pop back to home screen and activate search mode
+                  Navigator.pop(context);
+                },
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
           body: !hasItem
               ? const Center(
