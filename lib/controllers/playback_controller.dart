@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import '../models/playable_item.dart';
@@ -96,8 +97,24 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
     return _audioPlayer.duration ?? Duration.zero;
   }
 
-  void _initAudioPlayer() {
+  void _initAudioPlayer() async {
     _audioPlayer.setVolume(1.0);
+    
+    // Configure audio attributes so Android knows this is media/music
+    await _audioPlayer.setAndroidAudioAttributes(AndroidAudioAttributes(
+      contentType: AndroidAudioContentType.music,
+      usage: AndroidAudioUsage.media,
+    ));
+
+    // Request audio focus and activate the audio session
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      await session.setActive(true);
+    } catch (e) {
+      print("Error activating AudioSession: $e");
+    }
+
     // Listen for background player status
     _audioPlayer.playerStateStream.listen((state) {
       if (!_isVideoActive) {
@@ -309,17 +326,15 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         _isBuffering = false;
         notifyListeners();
 
-        // Load audio source in background after video has started to optimize network/CPU
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (_isVideoActive && _videoController != null && _videoController!.value.isPlaying && _currentLoadedAudioId != item.id) {
-            _audioPlayer.setAudioSource(audioSource).then((_) {
-              _currentLoadedAudioId = item.id;
-            }).catchError((e) {
-              print("Background audio source error: $e");
-              return null;
-            });
-          }
-        });
+        // Load audio source in background immediately so it is preloaded and cached!
+        if (_currentLoadedAudioId != item.id) {
+          _audioPlayer.setAudioSource(audioSource).then((_) {
+            _currentLoadedAudioId = item.id;
+          }).catchError((e) {
+            print("Background audio source error: $e");
+            return null;
+          });
+        }
       } else {
         await _audioPlayer.setAudioSource(audioSource);
         _currentLoadedAudioId = item.id;
