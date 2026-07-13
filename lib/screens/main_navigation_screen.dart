@@ -63,7 +63,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 600), () {
-      _performSearch(query);
+      _performSearch(query, collapseSearchBar: false);
     });
   }
 
@@ -73,12 +73,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  void _performSearch(String query) {
+  void _performSearch(String query, {bool collapseSearchBar = false}) {
     if (query.trim().isEmpty) return;
     setState(() {
       _currentIndex = 0; // Force switch to Video/Home feed tab
-      _isSearching = false;
-      _searchFocusNode.unfocus();
+      if (collapseSearchBar) {
+        _isSearching = false;
+        _searchFocusNode.unfocus();
+      }
     });
     // Trigger search in HomeScreenState
     _homeScreenKey.currentState?.performSearch(query);
@@ -225,7 +227,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 focusNode: _searchFocusNode,
                 style: const TextStyle(color: Colors.white, fontSize: 15),
                 textInputAction: TextInputAction.search,
-                onSubmitted: _performSearch,
+                onSubmitted: (val) => _performSearch(val, collapseSearchBar: true),
                 onChanged: _onSearchChanged,
                 decoration: const InputDecoration(
                   hintText: "Search YouTube...",
