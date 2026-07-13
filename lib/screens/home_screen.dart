@@ -31,6 +31,13 @@ class HomeScreenState extends State<HomeScreen> {
     _performSearch(query);
   }
 
+  void resetFeed() {
+    setState(() {
+      _selectedTag = "All";
+    });
+    _loadHomeFeed();
+  }
+
   final List<String> _categories = [
     "All",
     "Music",
@@ -56,7 +63,18 @@ class HomeScreenState extends State<HomeScreen> {
   String _getQueryForTag(String tag) {
     switch (tag) {
       case "All":
-        return "Cambodia trending popular";
+        final trendingKeywords = [
+          "Cambodia trending popular",
+          "Khmer music video 2026",
+          "Khmer song trending popular",
+          "Khmer comedy funny clip",
+          "galaxy navatra trending",
+          "town production music",
+          "hang meas popular song",
+          "Cambodia entertainment show"
+        ];
+        trendingKeywords.shuffle();
+        return trendingKeywords.first;
       case "Music":
         return "Khmer music trending";
       case "Gaming":
@@ -203,10 +221,19 @@ class HomeScreenState extends State<HomeScreen> {
                             bool showShorts = _shortsList.isNotEmpty && _searchResults.length > 2;
                             int itemCount = _searchResults.length + (showShorts ? 1 : 0);
 
-                            return ListView.builder(
-                              physics: const BouncingScrollPhysics(),
-                              itemCount: itemCount,
-                              itemBuilder: (context, index) {
+                            return RefreshIndicator(
+                              color: Colors.red,
+                              backgroundColor: const Color(0xFF1E1E1E),
+                              onRefresh: () async {
+                                await _loadHomeFeed();
+                                await _loadShortsShelf();
+                              },
+                              child: ListView.builder(
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
+                                itemCount: itemCount,
+                                itemBuilder: (context, index) {
                                 if (showShorts && index == 2) {
                                   return _buildShortsShelf();
                                 }
@@ -231,9 +258,10 @@ class HomeScreenState extends State<HomeScreen> {
 
                                 return _buildVideoCard(video, dTask);
                               },
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                      ),
             ),
           ],
         ),

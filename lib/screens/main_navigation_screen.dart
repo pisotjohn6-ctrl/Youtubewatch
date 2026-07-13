@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cast/cast.dart';
@@ -12,6 +13,8 @@ import 'player_screen.dart';
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
 
+  static bool pendingSearchActivation = false;
+
   @override
   State<MainNavigationScreen> createState() => _MainNavigationScreenState();
 }
@@ -25,6 +28,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   bool _isSearching = false;
+  Timer? _debounce;
 
   late final List<Widget> _pages = [
     HomeScreen(key: _homeScreenKey),
@@ -43,7 +47,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  void activateSearch() {
+    setState(() {
+      _isSearching = true;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 600), () {
+      _performSearch(query);
+    });
   }
 
   Future<void> _requestNotificationPermission() async {
@@ -205,6 +226,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 15),
                 textInputAction: TextInputAction.search,
                 onSubmitted: _performSearch,
+                onChanged: _onSearchChanged,
                 decoration: const InputDecoration(
                   hintText: "Search YouTube...",
                   hintStyle: TextStyle(color: Colors.grey, fontSize: 15),
@@ -217,6 +239,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               icon: const Icon(Icons.clear, color: Colors.white, size: 18),
               onPressed: () {
                 _searchController.clear();
+                _homeScreenKey.currentState?.resetFeed();
               },
             ),
           ],
@@ -300,6 +323,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (MainNavigationScreen.pendingSearchActivation) {
+      MainNavigationScreen.pendingSearchActivation = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        activateSearch();
+      });
+    }
     return ListenableBuilder(
       listenable: _playbackController,
       builder: (context, _) {

@@ -9,6 +9,7 @@ import '../services/youtube_service.dart';
 import '../services/download_service.dart';
 import '../models/download_task.dart';
 import '../models/playable_item.dart';
+import 'main_navigation_screen.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key});
@@ -276,7 +277,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               IconButton(
                 icon: const Icon(Icons.search, color: Colors.white, size: 22),
                 onPressed: () {
-                  // Pop back to home screen and activate search mode
+                  MainNavigationScreen.pendingSearchActivation = true;
                   Navigator.pop(context);
                 },
               ),
