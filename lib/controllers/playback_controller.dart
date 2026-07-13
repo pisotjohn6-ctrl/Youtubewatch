@@ -151,60 +151,26 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
   void _videoListener() {
     if (_videoController == null || !_isVideoActive) return;
 
-    // Use audio player position/duration as source of truth
-    _positionController.add(_audioPlayer.position);
-    if (_audioPlayer.duration != null) {
-      _durationController.add(_audioPlayer.duration!);
-    }
+    _positionController.add(_videoController!.value.position);
+    _durationController.add(_videoController!.value.duration);
 
-    final isBufferingNow = _videoController!.value.isBuffering || _audioPlayer.processingState == ProcessingState.buffering;
+    final isBufferingNow = _videoController!.value.isBuffering;
     if (isBufferingNow != _isBuffering) {
       _isBuffering = isBufferingNow;
       notifyListeners();
     }
 
-    // Keep video player synchronized with the audio player position
-    // only if there is a major drift (e.g. > 1500ms) and we haven't synced in the last 4 seconds
-    // to prevent continuous seeking loops that freeze the video decoder.
-    final audioPos = _audioPlayer.position;
+    // Keep silent audio player synchronized with the video player position
     final videoPos = _videoController!.value.position;
-    final now = DateTime.now();
-    if ((audioPos - videoPos).inMilliseconds.abs() > 1500 &&
-        (_lastSyncTime == null || now.difference(_lastSyncTime!) > const Duration(seconds: 4))) {
-      _lastSyncTime = now;
-      _videoController!.seekTo(audioPos);
+    if ((_audioPlayer.position - videoPos).inMilliseconds.abs() > 1000) {
+      _audioPlayer.seek(videoPos);
     }
 
-    // Sync play/pause state from video player to audio player (e.g. if user taps video overlay controls)
-    if (_videoController!.value.isPlaying && !_isPlaying) {
-      _isPlaying = true;
-      _audioPlayer.play();
-      notifyListeners();
-    } else if (!_videoController!.value.isPlaying && _isPlaying && !_videoController!.value.isBuffering) {
-      _isPlaying = false;
-      _audioPlayer.pause();
-      notifyListeners();
-    }
-
-    // Ensure both are running if global playing state is active and not buffering
-    if (_isPlaying && !_isBuffering) {
-      if (!_audioPlayer.playing) {
-        _audioPlayer.play();
-      }
-      if (!_videoController!.value.isPlaying) {
-        _videoController!.play();
-      }
-    }
-
-    // Handle buffering synchronization: pause audio if video is buffering, play when ready
-    if (_videoController!.value.isBuffering && _audioPlayer.playing) {
-      _audioPlayer.pause();
-    } else if (!_videoController!.value.isBuffering && _isPlaying && !_audioPlayer.playing) {
-      _audioPlayer.play();
-    }
-
-    // Auto-play next when audio player finishes (audio is the source of truth)
-    if (_audioPlayer.processingState == ProcessingState.completed) {
+    // Auto-play next when video finishes
+    if (_videoController!.value.position >= _videoController!.value.duration &&
+        _videoController!.value.duration > Duration.zero &&
+        !_videoController!.value.isPlaying &&
+        _isPlaying) {
       playNext();
     }
   }
@@ -361,13 +327,13 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         }
 
         await _videoController!.initialize();
-        await _videoController!.setVolume(0.0); // Mute video player
+        await _videoController!.setVolume(1.0); // Keep video player audio active
         _videoController!.addListener(_videoListener);
         
-        // Initialize AudioPlayer immediately
+        // Initialize AudioPlayer immediately at 0.0 volume
         await _audioPlayer.setAudioSource(audioSource);
         _currentLoadedAudioId = item.id;
-        _audioPlayer.setVolume(1.0);
+        await _audioPlayer.setVolume(0.0); // Silent in foreground
 
         // Start both simultaneously
         await _videoController!.play();
@@ -379,7 +345,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         await _audioPlayer.setAudioSource(audioSource);
         _currentLoadedAudioId = item.id;
-        _audioPlayer.setVolume(1.0);
+        await _audioPlayer.setVolume(1.0); // Full volume in background
         await _audioPlayer.play();
         _isPlaying = true;
         _isBuffering = false;
@@ -540,6 +506,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
       // Transition to BACKGROUND
       if (_isVideoActive && _videoController != null && _videoController!.value.isInitialized) {
         _isVideoActive = false;
+        final position = _videoController!.value.position;
 
         // Clean up video player state listener
         _videoController!.removeListener(_videoListener);
@@ -547,8 +514,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         // Pause video player
         _videoController!.pause();
         
-        // Ensure audio player continues playing
-        _audioPlayer.setVolume(1.0);
+        // Align and play audio player at full volume in background
+        await _audioPlayer.seek(position);
+        await _audioPlayer.setVolume(1.0);
         notifyListeners();
       }
     } else if (state == AppLifecycleState.resumed) {
@@ -558,6 +526,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         final position = _audioPlayer.position;
         final wasPlaying = _audioPlayer.playing;
 
+        // Mute audio player in foreground
+        await _audioPlayer.setVolume(0.0);
+
         if (currentItem != null) {
           try {
             // Check if existing controller is still initialized and valid
@@ -565,6 +536,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
               _videoController!.removeListener(_videoListener);
               _videoController!.addListener(_videoListener);
               await _videoController!.seekTo(position);
+              await _videoController!.setVolume(1.0); // Keep video volume active in foreground
               if (wasPlaying) {
                 await _videoController!.play();
               }
@@ -595,7 +567,7 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
 
               if (_videoController != null) {
                 await _videoController!.initialize();
-                await _videoController!.setVolume(0.0); // Mute video player
+                await _videoController!.setVolume(1.0); // Full volume in foreground
                 _videoController!.addListener(_videoListener);
                 await _videoController!.seekTo(position);
 
