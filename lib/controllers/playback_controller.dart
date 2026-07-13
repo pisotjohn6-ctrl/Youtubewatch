@@ -517,6 +517,9 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         // Align and play audio player at full volume in background
         await _audioPlayer.seek(position);
         await _audioPlayer.setVolume(1.0);
+        if (_isPlaying) {
+          await _audioPlayer.play();
+        }
         notifyListeners();
       }
     } else if (state == AppLifecycleState.resumed) {

@@ -423,22 +423,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   icon: const Icon(Icons.skip_previous, size: 28, color: Colors.white),
                                   onPressed: _playbackController.playPrevious,
                                 ),
-                                const SizedBox(width: 16),
-                                CircleAvatar(
-                                  radius: 22,
-                                  backgroundColor: Colors.red,
-                                  child: IconButton(
-                                    icon: Icon(
-                                      _playbackController.isPlaying
-                                          ? Icons.pause
-                                          : Icons.play_arrow,
-                                      size: 24,
-                                      color: Colors.white,
-                                    ),
-                                    onPressed: _playbackController.togglePlay,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
+                                const SizedBox(width: 48),
                                 IconButton(
                                   icon: const Icon(Icons.skip_next, size: 28, color: Colors.white),
                                   onPressed: _playbackController.playNext,
