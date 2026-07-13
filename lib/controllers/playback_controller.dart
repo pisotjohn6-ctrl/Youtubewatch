@@ -514,11 +514,11 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         // Pause video player
         _videoController!.pause();
         
-        // Align and play audio player at full volume in background
-        await _audioPlayer.seek(position);
-        await _audioPlayer.setVolume(1.0);
+        // Align and play audio player at full volume in background (NO AWAIT)
+        _audioPlayer.seek(position);
+        _audioPlayer.setVolume(1.0);
         if (_isPlaying) {
-          await _audioPlayer.play();
+          _audioPlayer.play();
         }
         notifyListeners();
       }
@@ -529,8 +529,8 @@ class PlaybackController extends ChangeNotifier with WidgetsBindingObserver {
         final position = _audioPlayer.position;
         final wasPlaying = _audioPlayer.playing;
 
-        // Mute audio player in foreground
-        await _audioPlayer.setVolume(0.0);
+        // Mute audio player in foreground (NO AWAIT)
+        _audioPlayer.setVolume(0.0);
 
         if (currentItem != null) {
           try {
